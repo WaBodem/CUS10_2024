@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding:utf-8 -*-
 import paho.mqtt.client as mqtt
 
@@ -7,12 +7,14 @@ import cfg  # Stellen Sie sicher, dass cfg die BROKER-Konfiguration enthält
 from time import sleep, time
 import ADS1263
 import RPi.GPIO as GPIO
+import setproctitle
+
+setproctitle.setproctitle("CUS10_joystick.py")
 
 bJoystickInit = False
+bJoystickStop_aftermove = False  #wenn kein Ausschlag dann false
 # Verwenden der Namen, um die Kanäle anzusprechen
 channel_names = ['CS', 'HUB', 'CD', 'LICHT', 'KS', 'KD']
-
-
 
 # #setup gpio20 as input for Roboter_is_connected
 GPIO.setmode(GPIO.BCM)
@@ -49,7 +51,7 @@ def on_connect(client, userdata, flags, rc):
     print("Verbunden mit dem Broker")
 
 #function to read joystick values 20 times for calibration and check if average is between 2.4 and 2.6V for each axis
-#axis HUB = adc1 channel 0  axis CD = adc1 channel 1    axis CS = adc1 channel 2    axis KS = adc1 channel 3    axis KD = adc1 channel 4    axis LICHT = adc1 channel 5 
+#axis HUB = adc1 channel 1  axis CD = adc1 channel 2    axis CS = adc1 channel 0    axis KS = adc1 channel 4    axis KD = adc1 channel 5    axis LICHT = adc1 channel 3
 def init_joystick():
     global bJoystickInit, channel_names
 
@@ -82,10 +84,10 @@ def init_joystick():
    
     # Überprüfung der Durchschnittswerte
     bJoystickInit = True
-    client.publish(cfg.MQTT_ID + cfg.MQTT_TOPIC + cfg.INIT_TOPIC + cfg.JOYSTICKINITRAW_TOPIC, "zu Offset von 512: "+str(cfg.joystickoffset_zul))
+    client.publish(cfg.MQTT_ID + cfg.MQTT_TOPIC + cfg.INIT_TOPIC + cfg.JOYSTICKINITRAW_TOPIC, "zu Offset von 512: "+str(cfg.joystickcalib_offset_zul))
     for channel, avg in averages.items():
         client.publish(cfg.MQTT_ID + cfg.MQTT_TOPIC + cfg.INIT_TOPIC + cfg.JOYSTICKINITRAW_TOPIC +'/CH'+str(channel_names[channel]), "v: " + str(round(avg,4))+ ' 10bitval: '+ str(scale_voltage_to_10bit(avg, cfg.ADC_REF)) +" Offset: " + str(scale_voltage_to_10bit(avg, cfg.ADC_REF)-512))
-        if scale_voltage_to_10bit(avg,cfg.ADC_REF) > 512+cfg.joystickoffset_zul or scale_voltage_to_10bit(avg,cfg.ADC_REF) < 512-cfg.joystickoffset_zul:
+        if scale_voltage_to_10bit(avg,cfg.ADC_REF) > 512+cfg.joystickcalib_offset_zul or scale_voltage_to_10bit(avg,cfg.ADC_REF) < 512-cfg.joystickcalib_offset_zul:
             print(f"Channel {channel_names[channel]} average {avg}V is outside the calibration range")
             bJoystickInit = False
         else:
@@ -105,6 +107,7 @@ def init_joystick():
 
 #main function
 def main(): 
+    global bJoystickInit, channel_names, bJoystickStop_aftermove
     try:
 
         # Verbindung zum MQTT-Broker herstellen
@@ -154,14 +157,28 @@ def main():
 
                 if time() > mqtt_JoystickpubTimer and bJoystickInit:
                     mqtt_JoystickpubTimer = time() + cfg.MQTT_JoystickTimer
-                    client.publish(cfg.MQTT_ID+cfg.MQTT_TOPIC+cfg.JOYSTICKVAL_TOPIC+cfg.JOYSTICKMODBUSVR150_TOPIC, str(VR150_liste_channel_values[0:6]))
+                    # wenn joystick wert innerhalb toleranz ist sende 512
+                    for i  in range(len(VR150_liste_channel_values)):
+                        if VR150_liste_channel_values[i] < 512+cfg.joystickoffset_zul and VR150_liste_channel_values[i] > 512-cfg.joystickoffset_zul:
+                            VR150_liste_channel_values[i] = 512
+
+                    #wenn vr150_liste_channel_values summe exakt 512*6 ist dann ist bJoystickmove = False
+                    if sum(VR150_liste_channel_values) != 512*6 or not bJoystickStop_aftermove:
+                        client.publish(cfg.MQTT_ID+cfg.MQTT_TOPIC+cfg.JOYSTICKVAL_TOPIC+cfg.JOYSTICKMODBUSVR150_TOPIC, str(VR150_liste_channel_values[0:6]))
+                        if sum(VR150_liste_channel_values) == 512*6:
+                            bJoystickStop_aftermove = True
+                        else:
+                            bJoystickStop_aftermove = False
+
                     # for i, channel in enumerate(channelList):
                     #     client.publish(cfg.MQTT_ID+cfg.MQTT_TOPIC+cfg.JOYSTICKVAL_TOPIC+'/CH'+str(channel_names[channel]),str(scale_voltage_to_10bit(  (ADC_Value[i] * cfg.ADC_REF / 0x7fffffff),cfg.ADC_REF) ))
                 if time() > mqtt_JoystickRawpubTimer and not bJoystickInit:
                     mqtt_JoystickRawpubTimer = time() + cfg.MQTT_JoystickRawTimer
                     for i, channel in enumerate(channelList):
-                        client.publish(cfg.MQTT_ID+cfg.MQTT_TOPIC+cfg.JOYSTICKVAL_TOPIC+'/CH'+str(channel_names[channel]),'Init Err: v='+ str(round((ADC_Value[i] * cfg.ADC_REF / 0x7fffffff),3)) +' i: ' + str(scale_voltage_to_10bit(  (ADC_Value[i] * cfg.ADC_REF / 0x7fffffff),cfg.ADC_REF) 
-                                        +' i: ' + str(scale_voltage_to_10bit(  (ADC_Value[i] * cfg.ADC_REF / 0x7fffffff),cfg.ADC_REF) ) +' diffi: ' + str(scale_voltage_to_10bit(  (ADC_Value[i] * cfg.ADC_REF / 0x7fffffff),cfg.ADC_REF)-512 )))
+                            client.publish(cfg.MQTT_ID + cfg.MQTT_TOPIC + cfg.JOYSTICKVAL_TOPIC + '/CH' + str(channel_names[channel]),
+                                    'Init Err: v=' + str(round((ADC_Value[i] * cfg.ADC_REF / 0x7fffffff), 3)) +
+                                    ' i: ' + str(scale_voltage_to_10bit((ADC_Value[i] * cfg.ADC_REF / 0x7fffffff), cfg.ADC_REF)) +
+                                    ' diffi: ' + str(scale_voltage_to_10bit((ADC_Value[i] * cfg.ADC_REF / 0x7fffffff), cfg.ADC_REF) - 512))
                 for i, channel in enumerate(channelList):
                     print("\33[2A")
              
