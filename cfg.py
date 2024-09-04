@@ -16,7 +16,8 @@ MQTT_JoystickRawTimer= 5 #sec
 MQTT_JoystickTimer=.1 #sec
 
 ADC_REF=5.0 #Referenzspannung, anpassen falls nötig
-joystickoffset_zul=25
+joystickoffset_zul=40
+joystickcalib_offset_zul=35
 
 # Mapping von Namen zu Kanalnummern
 channel_mapping = {
@@ -29,3 +30,6 @@ channel_mapping = {
 }
 
 PIN_JOYSTICKINIT=5
+PIN_ROBOTERREFERENZIERT=6
+PIN_ROBOTERKOMMUNIKATION=13
+PIN_REFPARK=19
