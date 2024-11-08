@@ -961,6 +961,9 @@ try:
                 if bRefPark == False:
                     bRefPark = True
                     Rob_Referenz(modbus,'A') #alle achsen referenzieren
+                else:
+                    bRefPark = True
+                    Rob_Parken(modbus) #Roboter parken
             sleep(.1)  # Haupt-Thread läuft weiter
 except KeyboardInterrupt:
     rs232.close()
