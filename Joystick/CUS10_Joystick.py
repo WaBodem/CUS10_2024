@@ -11,6 +11,10 @@ import setproctitle
 
 setproctitle.setproctitle("CUS10_joystick.py")
 
+bLichttimer = False
+Lichttimer = 0
+aktueller_lichtwert = 0
+
 bJoystickInit = False
 bJoystickStop_aftermove = False  #wenn kein Ausschlag dann false
 # Verwenden der Namen, um die Kanäle anzusprechen
@@ -19,8 +23,8 @@ channel_names = ['CS', 'HUB', 'CD', 'LICHT', 'KS', 'KD']
 # #setup gpio20 as input for Roboter_is_connected
 GPIO.setmode(GPIO.BCM)
 # #setup gpio8 as output for  LED Roboter_is_connected
-GPIO.setup(cfg.PIN_JOYSTICKINIT, GPIO.OUT)
-GPIO.output(cfg.PIN_JOYSTICKINIT, GPIO.LOW)
+GPIO.setup(cfg.PINO_JOYSTICKINIT, GPIO.OUT)
+GPIO.output(cfg.PINO_JOYSTICKINIT, GPIO.LOW)
 
 
 # ADC1 test part
@@ -97,17 +101,17 @@ def init_joystick():
     if bJoystickInit:
         client.publish(cfg.MQTT_ID + cfg.JS_TOPIC + cfg.INIT_TOPIC, "Joystick init ok")
         print("Joystick init ok Nachricht veröffentlicht")
-        GPIO.output(cfg.PIN_JOYSTICKINIT, GPIO.HIGH)
+        GPIO.output(cfg.PINO_JOYSTICKINIT, GPIO.HIGH)
     else:
         client.publish(cfg.MQTT_ID + cfg.JS_TOPIC + cfg.INIT_TOPIC, "Joystick init failed")
         print("Joystick init failed Nachricht veröffentlicht")
         #gpio cfg.joystickinit pin low
-        GPIO.output(cfg.PIN_JOYSTICKINIT, GPIO.LOW)
+        GPIO.output(cfg.PINO_JOYSTICKINIT, GPIO.LOW)
 
 
 #main function
 def main(): 
-    global bJoystickInit, channel_names, bJoystickStop_aftermove
+    global bJoystickInit, channel_names, bJoystickStop_aftermove, bLichttimer, Lichttimer, aktueller_lichtwert  
     try:
 
         # Verbindung zum MQTT-Broker herstellen
@@ -161,6 +165,20 @@ def main():
                     for i  in range(len(VR150_liste_channel_values)):
                         if VR150_liste_channel_values[i] < 512+cfg.joystickoffset_zul and VR150_liste_channel_values[i] > 512-cfg.joystickoffset_zul:
                             VR150_liste_channel_values[i] = 512
+                    #wenn adc kanal licht > 600 dann setze starte timer für licht und setze aktuellen wert
+                    if (VR150_liste_channel_values[5] > cfg.LICHTSCHWELLENWERTJOYST_OBEN or VR150_liste_channel_values[5] < cfg.LICHTSCHWELLENWERTJOYST_UNTEN )and bLichttimer == False:
+                        bLichttimer=True
+                        Lichttimer=time()+cfg.Lichttimer
+                    if VR150_liste_channel_values[5] > cfg.LICHTSCHWELLENWERTJOYST_OBEN and bLichttimer and time() > Lichttimer:
+                        aktueller_lichtwert = aktueller_lichtwert + cfg.LICHTPWMSTEPS
+                        if aktueller_lichtwert > 100:
+                            aktueller_lichtwert = 100
+                        client.publish(cfg.MQTT_ID+cfg.KAMERALICHT_TOPIC, 'helligkeit: '+str(aktueller_lichtwert))   
+                    if VR150_liste_channel_values[5] < cfg.LICHTSCHWELLENWERTJOYST_UNTEN and bLichttimer and time() > Lichttimer:
+                        aktueller_lichtwert = aktueller_lichtwert - cfg.LICHTPWMSTEPS
+                        if aktueller_lichtwert < 0:
+                            aktueller_lichtwert = 0
+                        client.publish(cfg.MQTT_ID+cfg.KAMERALICHT_TOPIC, 'helligkeit: '+str(aktueller_lichtwert))   
 
                     #wenn vr150_liste_channel_values summe exakt 512*6 ist dann ist bJoystickmove = False
                     if sum(VR150_liste_channel_values) != 512*6 or not bJoystickStop_aftermove:
