@@ -23,6 +23,7 @@ import RPi.GPIO as GPIO
 import paho.mqtt.client as mqtt
 import cfg  # Stellen Sie sicher, dass cfg die BROKER-Konfiguration enthält
 import setproctitle
+import os
 
 
 
@@ -50,25 +51,25 @@ data_rs232pc_in = [0] * 30  # Beispielpuffer für "data_rs232pc_in"
 #setup gpio asoutput for roboter  LED referenziert
 GPIO.setmode(GPIO.BCM)
 
-GPIO.setup(cfg.PIN_JOYSTICKINIT, GPIO.OUT)
-GPIO.output(cfg.PIN_JOYSTICKINIT, GPIO.LOW)
+GPIO.setup(cfg.PINO_JOYSTICKINIT, GPIO.OUT)
+GPIO.output(cfg.PINO_JOYSTICKINIT, GPIO.LOW)
 
 
-GPIO.setup(cfg.PIN_ROBOTERREFERENZIERT, GPIO.OUT)
-GPIO.output(cfg.PIN_ROBOTERREFERENZIERT, GPIO.LOW)
+GPIO.setup(cfg.PINO_ROBOTERREFERENZIERT, GPIO.OUT)
+GPIO.output(cfg.PINO_ROBOTERREFERENZIERT, GPIO.LOW)
 
 #setup gpio asoutput for roboter  LED kommunikation
-GPIO.setup(cfg.PIN_ROBOTERKOMMUNIKATION, GPIO.OUT)
-GPIO.output(cfg.PIN_ROBOTERKOMMUNIKATION, GPIO.LOW)
+GPIO.setup(cfg.PINO_ROBOTERKOMMUNIKATION, GPIO.OUT)
+GPIO.output(cfg.PINO_ROBOTERKOMMUNIKATION, GPIO.LOW)
 
 #setup gpio asoutput for roboter  Ref/Park
-GPIO.setup(cfg.PIN_REFPARK, GPIO.IN)
+GPIO.setup(cfg.PINI_REFPARK, GPIO.IN)
 
 #setup gpio asoutput for roboter  LED refparkfahrt
-GPIO.setup(cfg.PIN_REFPARKFAHRTLED, GPIO.OUT)
+GPIO.setup(cfg.PINO_REFPARKFAHRTLED, GPIO.OUT)
 
 #setup gpio asoutput for roboter  PIN_ROBOTERANGESTECKT als pullup
-GPIO.setup(cfg.PIN_ROBOTERANGESTECKT, GPIO.IN, pull_up_down=GPIO.PUD_UP)  
+GPIO.setup(cfg.PINI_ROBOTERANGESTECKT, GPIO.IN, pull_up_down=GPIO.PUD_UP)  
 
 def split_32bit_to_15bit(value):
     # Umwandeln in 32-Bit-Zweierkomplement
@@ -135,17 +136,17 @@ def on_message(client, userdata, message):
         success = modbus.write_multiple_registers(slave=1, address=address, values=values)
         #print(f"Write successful: {success}")
         #joystick init led ok setzen, da sonst kein mqtt wert gesendet worden wäre
-        GPIO.output(cfg.PIN_JOYSTICKINIT, GPIO.HIGH)    
+        GPIO.output(cfg.PINO_JOYSTICKINIT, GPIO.HIGH)    
     if message.topic== cfg.MQTT_ID+cfg.DIST_TOPIC:
         if message.payload.decode('utf-8').find('31..06+') >= 0:
-            print("\n\rDisto Entfernung: ", message.payload.decode("utf-8"))
+            print("\n\r143 mqtt rec Disto Entfernung: ", message.payload.decode("utf-8"))
             bDistanzErgebnis=True
             LaserDistanz = message.payload.decode("utf-8")
   
     if message.topic == cfg.MQTT_ID+cfg.INKLINX_TOPIC:
         # print("145 Inklinometer X: ", message.payload.decode("utf-8"))
-        CS_WinkelinSteps=int((float(message.payload.decode("utf-8"))*-1)*(200*cfg.CS_GEAR*cfg.CS_USTEPS/360))
-        # print("147 CS Winkel Steps: ", CS_WinkelinSteps)
+        CS_WinkelinSteps=int(((float(message.payload.decode("utf-8"))-cfg.INKLINX_CORR)*-1)*(200*cfg.CS_GEAR*cfg.CS_USTEPS/360))
+        #print("147 CS Winkel Steps: ", CS_WinkelinSteps)
 
 
 #funct subscribe mqtt topics
@@ -153,7 +154,7 @@ def subscribe_mqtt_topics():
     #subscrib joystic values
     print("Subscribing to topic:", cfg.MQTT_ID+cfg.JS_TOPIC+cfg.JOYSTICKVAL_TOPIC+cfg.JOYSTICKMODBUSVR150_TOPIC)
     client.subscribe(cfg.MQTT_ID+cfg.JS_TOPIC+cfg.JOYSTICKVAL_TOPIC+cfg.JOYSTICKMODBUSVR150_TOPIC)
-    print("Subscribing to topic:", cfg.MQTT_ID+cfg.DIST_TOPIC+cfg.JOYSTICKVAL_TOPIC+cfg.JOYSTICKMODBUSVR150_TOPIC)
+    print("Subscribing to topic:", cfg.MQTT_ID+cfg.DIST_TOPIC)
     client.subscribe(cfg.MQTT_ID+cfg.DIST_TOPIC)
     print("Subscribing to topic:", cfg.MQTT_ID+cfg.INKLINX_TOPIC)
     client.subscribe(cfg.MQTT_ID+cfg.INKLINX_TOPIC) 
@@ -164,14 +165,14 @@ GPIO.setmode(GPIO.BCM)
 GPIO.setup(20, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 #setup gpio8 as output for  LED Roboter_is_connected
-GPIO.setup(cfg.PIN_ROBOTERVERBUNDENLED, GPIO.OUT)
+GPIO.setup(cfg.PINO_ROBOTERVERBUNDENLED, GPIO.OUT)
 
 #wenn Roboter verbunden dann LED an
-if GPIO.input(cfg.PIN_ROBOTERANGESTECKT) == 1:
-    GPIO.output(cfg.PIN_ROBOTERVERBUNDENLED, GPIO.HIGH)
+if GPIO.input(cfg.PINI_ROBOTERANGESTECKT) == 1:
+    GPIO.output(cfg.PINO_ROBOTERVERBUNDENLED, GPIO.HIGH)
     print("Roboter verbunden")
 else:
-    GPIO.output(8, GPIO.LOW)
+    GPIO.output(cfg.PINO_ROBOTERVERBUNDENLED, GPIO.LOW)
     print("Roboter nicht verbunden")
 
 class Modbus:
@@ -193,7 +194,7 @@ class Modbus:
                 raise Exception("Failed to open serial port")
         except Exception as e:
             print(f"43 Error opening serial port: {e}")
-            raise
+            os._exit(0)
         
     def read_holding_registers(self, slave, address, count):
         response = self.client.read_holding_registers(address, count, slave=slave)
@@ -207,20 +208,23 @@ class Modbus:
             return None
 
     def write_multiple_registers(self, slave, address, values):
+        
         response = self.client.write_registers(address, values, slave=slave)
         if not response.isError():
             return True
         else: 
-            print("58 Error writing registers")
+            print("214 Error writing registers")
             #exit the program - sende mqtt message dass modbus nicht verbunden und neu startet
             client.publish(cfg.BROKER, cfg.MQTT_ID+cfg.MODBUS_TOPIC+cfg.OS_TOPIC, "Modbus nicht verbunden RESTART!")
+            os._exit(0)
+
             
 
     def close(self):
         if self.client:
-            print("64 Closing serial port")
+            print("226 Closing serial port")
             self.client.close()
-            print("66 Serial port closed")
+            print("228 Serial port closed")
 
 # Beispielhafte Klasse, um die RS232-Kommunikation zu simulieren
 class RS232:
@@ -244,12 +248,20 @@ def read_modbus_data(modbus):
     global bmodbusread, posdata_alt
     try:
         #setze kommunikations led an
-        GPIO.output(cfg.PIN_ROBOTERKOMMUNIKATION, GPIO.LOW)
+        GPIO.output(cfg.PINO_ROBOTERKOMMUNIKATION, GPIO.LOW)
+        #starte einen timer (5sec )und warte bis modbus frei zum lesen 
+        start_time = time()
         while bmodbusread: #warte bis modbus frei zum lesen
+            #prüfe ob timer abgelaufen ist
+            if time() - start_time > 5:
+                print('Modbus Timeout')
+                #exit the program - sende mqtt message dass modbus nicht verbunden und neu startet
+                client.publish(cfg.BROKER, cfg.MQTT_ID+cfg.MODBUS_TOPIC+cfg.OS_TOPIC, "Modbus nicht verbunden RESTART!")
+                exit()
             sleep(.001) #kurze pause um cpu zu entlasten
             print('°', end="")
         bmodbusread = True
-        GPIO.output(cfg.PIN_ROBOTERKOMMUNIKATION, GPIO.HIGH)
+        GPIO.output(cfg.PINO_ROBOTERKOMMUNIKATION, GPIO.HIGH)
         result = modbus.read_holding_registers(slave=1, address=200, count=30)
         #print('253 modbus result: ', result)
         sleep(.002)
@@ -258,7 +270,7 @@ def read_modbus_data(modbus):
             print("Fehler beim Lesen der Modbus-Daten")
         elif isinstance(result, list):
             #setze kommunikations led wieder aus da ergebnis da
-            GPIO.output(cfg.PIN_ROBOTERKOMMUNIKATION, GPIO.LOW)
+            GPIO.output(cfg.PINO_ROBOTERKOMMUNIKATION, GPIO.LOW)
             #prüfe ob in register 200-210  ein wert größer 0 vorhanden ist wenn ja dann print werte von register 200-210    
             if any(x > 0 and x < 65536 for x in result[0:10]):
                 #setzt kommunikations led an
@@ -291,32 +303,36 @@ def rs232_thread(rs232):
  
         if got:
             buffer[offset:offset + len(got)] = got
-            # print("292 buffer: ", buffer)   
+            print("292 buffer: ", buffer)   
             offset += len(got)
             # Prüfen, ob im gesamten buffer 13 und 10 stehen
             if 13 in buffer:
                 # Finde die Position des ersten Vorkommens von 13 (CR)
                 first_cr_index = buffer.index(13)
+                print("312 New command detected")
                 new_command = True
                 # Setze alle Zeichen im buffer ab dem ersten \r auf \x00
                 for i in range(first_cr_index, len(buffer)):
                     buffer[i] = 0
+            else:
+                new_command = False
 
             # Debug-Ausgabe, um den modifizierten buffer zu überprüfen
             cleaned_data = [byte for byte in buffer if byte != 0]
-            print("304 cleaned_data", cleaned_data)
+            #print("321 cleaned_data", cleaned_data)
             #create ascii string from cleaned_data
             cleaned_data = ''.join(chr(c) for c in cleaned_data) 
             #clear buffer and got
             buffer = bytearray(35)
             got = bytearray(35)
+            print("327 erhaltene daten", cleaned_data)
             offset = 0
             address=20
             registers = modbus.read_holding_registers(slave=1, address=address, count=6)
-            print(f"313 Registers 20-25: {registers}")
+            #print(f"330 Registers 20-25: {registers}")
             if registers[0]==1 and registers[1]==1 and registers[2]==1 and registers[3]==1 and registers[4]==1 and registers[5]==63:
                 RefAchsen=31
-                print('316 RefAchsen: ', RefAchsen), registers[5], registers[4], registers[3], registers[2], registers[1], registers[0]
+                #print('333 RefAchsen: ', RefAchsen), registers[5], registers[4], registers[3], registers[2], registers[1], registers[0]
             else:
                 RefAchsen=0
 
@@ -334,7 +350,7 @@ def rs232_thread(rs232):
                     register200[8], register200[9],  # KS
                 ]
 
-                print('335 Register 200-209: ', register200)
+                #print('351 Register 200-209: ', register200)
                #CD
                 if register200[2] == 0 and register200[3] == 0:
                     CD_WinkelinSteps=0
@@ -342,43 +358,43 @@ def rs232_thread(rs232):
                     data_out[2]=register200[2]
                     data_out[3]=register200[3] - 65536
                     CD_WinkelinSteps=2560000+(int(data_out[2])  << 15) + data_out[3]    
-                    print('345 CD Pos: ', CD_WinkelinSteps)
+                    print('359 CD Pos: ', CD_WinkelinSteps)
                 elif register200[2] == 0 and register200[3] > 32768:
                     data_out[2]=register200[2]
                     data_out[3]=register200[3] - 65536
                     CD_WinkelinSteps=(int(data_out[2])  << 15) + data_out[3]    
-                    print('351 CD Pos: ', CD_WinkelinSteps)
+                    print('364 CD Pos: ', CD_WinkelinSteps)
                 elif register200[2] >= 32768:
                     data_out[2]=77 + (register200[2] - 65536)
                     print('341 ',data_out[2])
                     data_out[3]=32768-register200[3]
                     print('343 ',data_out[3])
                     CD_WinkelinSteps=(int(data_out[2])  << 15) + data_out[3]    
-                    print('341 CD Pos: ', CD_WinkelinSteps)   
+                    print('371 CD Pos: ', CD_WinkelinSteps)   
                 else:
                     data_out[2]= register200[2]
                     CD_WinkelinSteps=(int(data_out[2])  << 15) + register200[3]    
-                    print('345 CD Pos: ', CD_WinkelinSteps)
+                    print('375 CD Pos: ', CD_WinkelinSteps)
                 # KD
                 if register200[0] > 0:
                     data_out[0]=register200[0] - 65536
                     data_out[0]=data_out[0]*-1
-                    print(data_out[0])
+                    print('380',data_out[0])
                     data_out[1]=register200[1]
                     print(data_out[1])
                     KD_WinkelinSteps=(int(data_out[0])  << 15) + data_out[1]
                     KD_WinkelinSteps=1280000-KD_WinkelinSteps
-                    print('350 KD Pos in Steps: ', KD_WinkelinSteps)
+                    print('385 KD Pos in Steps: ', KD_WinkelinSteps)
                 elif register200[0] == 0 and register200[1] == 0:
                     KD_WinkelinSteps=0
                 elif  register200[0] == 0 and data_out[1] < 32768: #dann muss endschalter überfahren sein
                     KD_WinkelinSteps=(int(data_out[0])  << 15) + data_out[1]
-                    print('365 KD Pos in Steps: ', KD_WinkelinSteps)
+                    print('390 KD Pos in Steps: ', KD_WinkelinSteps)
                 else:
                     data_out[0]= register200[0]
                     data_out[1]= register200[1]-65536
                     KD_WinkelinSteps=(int(data_out[0])  << 15) + data_out[1]
-                    print('370 KD Pos in Steps: ', KD_WinkelinSteps)
+                    print('395 KD Pos in Steps: ', KD_WinkelinSteps)
                     if KD_WinkelinSteps < 0:
                         KD_WinkelinSteps=1280000 + KD_WinkelinSteps
                     else:
@@ -390,31 +406,34 @@ def rs232_thread(rs232):
                     data_out[9]=65536-register200[9]
                     KS_WinkelinSteps=(int(data_out[8])  << 15) + data_out[9] 
                     KS_WinkelinSteps=KS_WinkelinSteps*-1   
-                    print('381 KS Pos: ', KS_WinkelinSteps)
+                    print('407 KS Pos: ', KS_WinkelinSteps)
                 else:
                     KS_WinkelinSteps=(int(data_out[8])  << 15) + register200[9] 
-                    print('384 KS Pos: ', KS_WinkelinSteps)
+                    print('410 KS Pos: ', KS_WinkelinSteps)
 
                 #CD_WinkelinSteps=int(((int(data_out[2])  << 15) + register200[3]-cfg.CD_OFFSET)/314) #umrechnen in steps von radiianten
                 rs232.write_to_serial(f"0;{KD_WinkelinSteps};0;{CD_WinkelinSteps};0;{CS_WinkelinSteps};{data_out[6]};{data_out[7]};{data_out[8]};{KS_WinkelinSteps};{RefAchsen};0;0\n\r".encode())
-                # print(f"{'363 gesendete '}{data_out[0]};{data_out[1]};{data_out[2]};{CD_WinkelinSteps};0;{CS_WinkelinSteps};{data_out[6]};{data_out[7]};{data_out[8]};{data_out[9]};{RefAchsen};0;0\n\r".encode())
+                # print(f"{'414 gesendete '}{data_out[0]};{data_out[1]};{data_out[2]};{CD_WinkelinSteps};0;{CS_WinkelinSteps};{data_out[6]};{data_out[7]};{data_out[8]};{data_out[9]};{RefAchsen};0;0\n\r".encode())
  
 
         # Verarbeiten des empfangenen Befehls
         if new_command:
-            
+            #print command as ascii char code numbers not as charachters
+            print("417 new command: ", [ord(c) for c in cleaned_data])
+
+
             #prüfe ob im buffer ':' mehr ale 2 mal vorhanden ist wenn ja dann ist es ein gültiger befehl
             if cleaned_data.count(':') > 2:
                 try:
-                    print("364 Fahrbefehl cleaned_data[0:35]:", cleaned_data[0:35])
+                    print("423 Fahrbefehl cleaned_data[0:35]:", cleaned_data[0:35])
                 except ValueError as e:
                     print(f"Fehler beim Konvertieren von cleaned_data: {e}")
                 #prüfe ob 9. zeichen ein F ist wenn ja setze 9. bis 21. zeichen zu string zusammen
                 if cleaned_data[0] == 'F': #F
-                    print("369 F Befehl data_rs232pc_in[0:35]:", cleaned_data[0])
+                    print("428 F Befehl data_rs232pc_in[0:35]:", cleaned_data[0])
                     #setze 9. bis 21. zeichen zu string zusammen
                     command = cleaned_data[0:35]
-                    print("372 Befehl data_rs232pc_in[0:35]:", command)
+                    print("431 Befehl data_rs232pc_in[0:35]:", command)
                     #splitte string in liste
                     command_list = command.split(':')
                     # #ordne command_list[2] zu AchseNr -KD 150, KS 151, CD 152, CS 153, HUB 154
@@ -432,16 +451,19 @@ def rs232_thread(rs232):
                     Rob_freiFahren(AchseNr, int(command_list[2]), float(command_list[3]))
             
             #prüfe ob in data command 'L1' oder 'L0' vorhanden wenn ja schalte schachtlicht ein oder aus
-            if cleaned_data[0:2] == [76,49]: #L1
+            if cleaned_data[0:2] == "L1": #L1
+                print('449 Schachtlicht EIN') 
                 Rob_SchachtLicht(1)
-            elif cleaned_data[0:2] == [76,48]: #L0
+
+            elif cleaned_data[0:2] == "L0": #L0
+                print('452 Schachtlicht AUS')
                 Rob_SchachtLicht(0)
 
             # prüfe ob Befehl Blinklich am Roboter ein oder ausgeschaltet werden soll
-            if cleaned_data[0:2] == [66,49]: #B1
+            if cleaned_data[0:2] == "B1": #B1
                 Rob_Blinklicht(1)
                 print('Blinklicht ein')  
-            elif cleaned_data[0:2] == [66,48]: #B0
+            elif cleaned_data[0:2] == "B0": #B0
                 Rob_Blinklicht(0)
                 print('Blinklicht aus')
             
@@ -451,10 +473,10 @@ def rs232_thread(rs232):
                 while ref_retry_counter > 0:
                     bRefPark=True
                     #setze refpark led an
-                    GPIO.output(cfg.PIN_REFPARKFAHRTLED, GPIO.HIGH)
+                    GPIO.output(cfg.PINO_REFPARKFAHRTLED, GPIO.HIGH)
                     Rob_Referenz(modbus,'A') #alle achsen referenzieren
                     #setze refpark led aus
-                    GPIO.output(cfg.PIN_REFPARKFAHRTLED, GPIO.LOW)
+                    GPIO.output(cfg.PINO_REFPARKFAHRTLED, GPIO.LOW)
                 ref_retry_counter=5
             
            # Roboter Parken
@@ -463,10 +485,10 @@ def rs232_thread(rs232):
                 print('408 Roboter Parken Befehl erhalten')  
                 bRefPark=True
                 #setze refpark led an
-                GPIO.output(cfg.PIN_REFPARKFAHRTLED, GPIO.HIGH)
+                GPIO.output(cfg.PINO_REFPARKFAHRTLED, GPIO.HIGH)
                 Rob_Parken(modbus) #Roboter parken
                 #setze refpark led aus
-                GPIO.output(cfg.PIN_REFPARKFAHRTLED, GPIO.LOW)
+                GPIO.output(cfg.PINO_REFPARKFAHRTLED, GPIO.LOW)
 
              
            # Roboter Freigabe
@@ -493,8 +515,9 @@ def rs232_thread(rs232):
                 rs232.write_to_serial(f"{poskd};{CD_WinkelinSteps};{poscs};{poshub};{posks};{RefAchsen};0;0\n\r".encode())
                 bcmdquerypos=False
 
-          # Distanz messen
+          # Distanz messen wenn direkt über DMS Tools - ansonsten wird Befehl von Bridge abgefangen und per mqtt gesendet
             if cleaned_data == "Dg" or cleaned_data=='DG': #Distanz messe
+                print('512 got cmd: Distanz messen')
                 client.publish(cfg.MQTT_ID+cfg.DIST_TOPIC, "\n\rDistanz messen...\n\r")
                 client.publish(cfg.MQTT_ID+cfg.LASERCMD_TOPIC, "cmd:distanz")
 
@@ -510,7 +533,7 @@ def rs232_thread(rs232):
             # Konvertieren der gefilterten ASCII-Werte zurück in einen String
             filtered_command_str = ''.join(chr(c) for c in filtered_command)
 
-            print("353 Filtered Command:", filtered_command_str)
+            print("528 Filtered Command:", filtered_command_str)
 
             # Rücksetzen für den nächsten Befehl
             new_command = False
@@ -518,7 +541,7 @@ def rs232_thread(rs232):
             buffer = bytearray(12)
         if bDistanzErgebnis:
             bDistanzErgebnis=False
-            print('480 Distanz: ', LaserDistanz)
+            print('536 Distanz: ', LaserDistanz)
             rs232.write_to_serial(f"{LaserDistanz}\n\r".encode())
 
         #cleanded_data zurücksetzen
@@ -539,6 +562,7 @@ def send_random_values(stop_event):
     #print(f"Write successful: {success}")
     print(f"400 Written values: {values_to_write}")
     value=1
+
     while not stop_event.is_set():
         #erhöhre e inen zähler um 1 und sende diesen an die SPS register 171 per modbus  
         address=171
@@ -551,9 +575,9 @@ def send_random_values(stop_event):
         #read modbus data register 171
         result = modbus.read_holding_registers(slave=1, address=171, count=1)
         if result:
-            GPIO.output(cfg.PIN_ROBOTERKOMMUNIKATION, GPIO.LOW)
+            GPIO.output(cfg.PINO_ROBOTERKOMMUNIKATION, GPIO.LOW)
             sleep(0.005)  # 5 ms warten
-            GPIO.output(cfg.PIN_ROBOTERKOMMUNIKATION, GPIO.HIGH)
+            GPIO.output(cfg.PINO_ROBOTERKOMMUNIKATION, GPIO.HIGH)
 
 
 # Methode zum expliziten Schließen der seriellen Schnittstelle
@@ -631,10 +655,9 @@ def Rob_Referenz(modbus,Achse):
     while bmodbusread:
         sleep(.001) #kurze pause um cpu zu entlasten
     result = modbus.read_holding_registers(slave=1, address=address, count=6)
-    print('494 ref_ok_achsen 20-25: ', result)
+    print('649 ref_ok_achsen 20-25: ', result)
     sleep
     #write to holding register 158 160 'Ref' Roboter Refernzieren
-    address=50 
     if str(Achse) == "A":
         address=50 
         values = [82,48]#'R A referenzieren alle Achsen
@@ -688,8 +711,8 @@ def Rob_Referenz(modbus,Achse):
         previous_register_206 = current_register_206
         previous_register_207 = current_register_207
 
-        # Breche die Schleife ab, wenn der Zähler 50 erreicht
-        if unchanged_counter >= 8 and register23[0] == 0:
+        # Breche die Schleife ab, wenn der Zähler 10 erreicht
+        if unchanged_counter >= 10 and register23[0] == 0:
             print("Die Werte haben sich 8 Mal nicht geändert. Schleife wird abgebrochen.")
             unchanged_counter=0
             ref_retry_counter -=1
@@ -751,7 +774,9 @@ def Rob_Referenz(modbus,Achse):
             register200[8], register200[9],  # KS
             register200[10],  # Statusbit RefOk
         ]
-
+        print('768 Referenzstatus',register200[10])
+        # set pin PINO_REFPARKFAHRTLED high
+        GPIO.output(cfg.PINO_REFPARKFAHRTLED, GPIO.HIGH)
 
         # Senden der Werte über die serielle Schnittstelle im gewünschten Format
         rs232.write_to_serial(f"{data_out[0]};{data_out[1]};{data_out[2]};{data_out[3]};{data_out[4]};{data_out[5]};{data_out[6]};{data_out[7]};{data_out[8]};{data_out[9]};{data_out[10]};0;0\n\r".encode())
@@ -929,9 +954,10 @@ try:
     while True:
             # Überprüfen Sie den Modbus-Statu
             #set kommunikations led aus
-            GPIO.output(cfg.PIN_ROBOTERKOMMUNIKATION, GPIO.LOW)
+            GPIO.output(cfg.PINO_ROBOTERKOMMUNIKATION, GPIO.LOW)
             read_modbus_data(modbus)
-            if GPIO.input(cfg.PIN_REFPARK) == 1:
+            if GPIO.input(cfg.PINI_REFPARK) == 1:
+                print('949 PIN RefPark ist gesetzt!')
                 if bRefPark == False:
                     bRefPark = True
                     Rob_Referenz(modbus,'A') #alle achsen referenzieren
@@ -953,6 +979,7 @@ finally:
         print("571 Closing Modbus")
         modbus.close()
     #exit script
-    print("574 Script exit")
-    exit()
+    print("974 Script exit")
+    os._exit(0)  # Exit the script
+
     
