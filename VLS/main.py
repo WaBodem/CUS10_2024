@@ -1,4 +1,6 @@
-''' VLS CUS10 WB Juli24'''
+''' VLS CUS10 WB Juli24
+RP2040
+'''
 #from DfrobotGP8403 import *
 import utime
 from sys import exit
