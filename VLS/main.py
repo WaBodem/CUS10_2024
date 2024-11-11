@@ -55,15 +55,6 @@ pins = {
 }
 #Lenze
 
-# Init DAC with desired address, pins, and hard/soft mode
-# DAC = DfrobotGP8403 (0x5F, 5, 4, 400000, True)
-# Set output range
-# DAC.set_dac_out_range(OUTPUT_RANGE_5V)
-
-# pwm = PWM(Pin(PWM_Pin_Lenze))
-# pwm.freq(1000)
-# pwm.duty_u16(0)
-# bmove=False
 
 def fdbg(line):
     print(line, "debug")
