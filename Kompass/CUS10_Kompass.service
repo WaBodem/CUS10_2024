@@ -1,0 +1,15 @@
+Unit]
+Description=CUS10_Kompass
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStart= /usr/bin/python3 /home/cus10/bksscripts/CUS10_Kompass.py
+WorkingDirectory= /home/cus10/bksscripts
+StandardOutput=inherit
+StandardError=inherit
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
