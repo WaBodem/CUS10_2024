@@ -26,7 +26,6 @@ LICHTSCHWELLENWERTJOYST_UNTEN=350
 
 ADC_REF=5.0 #Referenzspannung, anpassen falls nötig
 joystickoffset_zul=40
-joystickcalib_offset_zul=35
 
 # Mapping von Namen zu Kanalnummern
 channel_mapping = {
