@@ -91,7 +91,7 @@ def init_joystick():
     client.publish(cfg.MQTT_ID + cfg.JS_TOPIC + cfg.INIT_TOPIC + cfg.JOYSTICKINITRAW_TOPIC, "zu Offset von 512: "+str(cfg.joystickcalib_offset_zul))
     for channel, avg in averages.items():
         client.publish(cfg.MQTT_ID + cfg.JS_TOPIC + cfg.INIT_TOPIC + cfg.JOYSTICKINITRAW_TOPIC +'/CH'+str(channel_names[channel]), "v: " + str(round(avg,4))+ ' 10bitval: '+ str(scale_voltage_to_10bit(avg, cfg.ADC_REF)) +" Offset: " + str(scale_voltage_to_10bit(avg, cfg.ADC_REF)-512))
-        if scale_voltage_to_10bit(avg,cfg.ADC_REF) > 512+cfg.joystickcalib_offset_zul or scale_voltage_to_10bit(avg,cfg.ADC_REF) < 512-cfg.joystickcalib_offset_zul:
+        if scale_voltage_to_10bit(avg,cfg.ADC_REF) > 512+channel_names[channel]['kaliboffset'] or scale_voltage_to_10bit(avg,cfg.ADC_REF) < 512-+channel_names[channel]['kaliboffset']l:
             print(f"Channel {channel_names[channel]} average {avg}V is outside the calibration range")
             bJoystickInit = False
         else:
