@@ -30,12 +30,12 @@ joystickcalib_offset_zul=35
 
 # Mapping von Namen zu Kanalnummern
 channel_mapping = {
-    'CS': 0,
-    'HUB': 1,
-    'CD': 2,
-    'LICHT': 3,
-    'KS': 4,
-    'KD': 5
+    'CS': {'channel': 0, 'zulkaliboffset': 35},
+    'HUB': {'channel': 1, 'zulkaliboffset': 35},
+    'CD': {'channel': 2, 'zulkaliboffset': 35},
+    'LICHT': {'channel': 3, 'zulkaliboffset': 300},  # Kein Offset angegeben
+    'KS': {'channel': 4, 'zulkaliboffset': 35},
+    'KD': {'channel': 5, 'zulkaliboffset': 35}
 }
 
 PINO_JOYSTICKINIT=5
